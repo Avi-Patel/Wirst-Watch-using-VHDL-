@@ -1,0 +1,506 @@
+library IEEE;
+use IEEE.numeric_bit.all;
+
+use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.std_logic_unsigned.all;
+entity wristwatch is
+port(B1, B2, B3, main_clk: in bit;
+
+anode : out STD_LOGIC_VECTOR (7 downto 0);
+ledout1 : out STD_LOGIC_VECTOR (6 downto 0);
+ring_alarm ,alarm_set_disp: out bit
+);
+end wristwatch;
+
+architecture wristwatch1 of wristwatch is
+type st_type is (time1, set_min, set_hours, alarm, set_alarm_hrs,
+set_alarm_min, stop_watch);
+signal state, nextstate: st_type;
+signal inch, incm, alarm_off, set_alarm, incha, incma,
+start_stop, reset: bit;
+signal disp1_input: unsigned(31 downto 0);
+signal counter : integer:=0;
+signal am_pm, aam_pm,ring, alarm_set:  bit;
+signal hours, ahours, minutes, aminutes, seconds:  unsigned(7 downto 0);
+signal swhundreths, swseconds, swminutes:  unsigned(7 downto 0);
+signal clk :  bit;
+signal b1p,b2p,b3p :bit;
+
+component clock is
+	port(clk, inch, incm, incha, incma, set_alarm, alarm_off: in bit;
+	hours, ahours, minutes, aminutes, seconds: inout unsigned(7 downto 0);
+	am_pm, aam_pm, ring, alarm_set: inout bit);
+end component;
+component stopwatch is
+	port(clk, reset, start_stop: in bit;
+	swhundreths, swseconds, swminutes: inout unsigned(7 downto 0));
+end component;
+
+component seven is
+port(main_clk,reset: in bit;
+		displayed_number: in unsigned (31 downto 0);
+		Anode_Activate : out STD_LOGIC_VECTOR (7 downto 0);
+      LED_out : out STD_LOGIC_VECTOR (6 downto 0));
+end component;
+
+
+begin
+
+	clock1: clock port map(clk, inch, incm, incha, incma, set_alarm, alarm_off,
+	hours, ahours, minutes, aminutes, seconds, am_pm,
+	aam_pm, ring, alarm_set);
+	stopwatch1: stopwatch port map(clk, reset, start_stop, swhundreths,
+	swseconds, swminutes);
+	disp1 : seven port map(main_clk,reset,disp1_input,anode,ledout1);
+		process(state, B1, B2, B3)
+		begin
+		alarm_off <= '0'; inch <= '0'; incm <= '0'; set_alarm <= '0'; incha <= '0';
+		incma <= '0'; start_stop <= '0'; reset <= '0';
+		case state is
+		when time1 =>
+			if (B1 = '1' and b1p = '0') then nextstate <= alarm;
+			elsif (B2 = '1' and b2p = '0') then nextstate <= set_hours;
+			else nextstate <= time1;
+			end if;
+			if (B3 = '1' and b3p= '0') then alarm_off <= '1';
+			end if;
+			if am_pm = '0' then
+				disp1_input <= "11011111" & hours & minutes & seconds;
+			else		disp1_input <= "11101111" & hours & minutes & seconds;
+			end if;
+			
+			
+		when set_hours =>
+			if B3 = '1'  and b3p ='0' then inch <= '1'; nextstate <= set_hours;
+			else nextstate <= set_hours;			
+			end if;
+			if B2 = '1' and b2p = '0' then nextstate <= set_min;
+			end if;
+			if am_pm = '0' then
+				disp1_input <= "11011111" & hours & minutes & seconds;
+			else		disp1_input <= "11101111" & hours & minutes & seconds;
+			end if;
+			
+		when set_min =>
+			if B3 = '1' and b3p = '0' then incm <= '1'; nextstate <= set_min;
+			else nextstate <= set_min;
+			end if;
+			if B2 = '1' and b2p = '0' then nextstate <= time1;
+			end if;
+			if am_pm = '0' then
+				disp1_input <= "11011111" & hours & minutes & seconds;
+			else		disp1_input <= "11101111" & hours & minutes & seconds;
+			end if;
+			
+		when alarm =>
+			if B1 = '1' and b1p = '0' then nextstate <= stop_watch;
+			elsif B2 = '1' and b2p = '0' then nextstate <= set_alarm_hrs;
+			else nextstate <= alarm;		
+			end if;
+			if B3 = '1' and b3p = '0' then set_alarm <= '1'; nextstate <= alarm;
+			end if;
+			if aam_pm = '0' then
+				disp1_input <= "1101111111111111" & ahours & aminutes;
+			else		disp1_input <= "1110111111111111" & ahours & aminutes;
+			end if;
+			
+		
+		when set_alarm_hrs =>
+			if B2 = '1' and b2p ='0' then nextstate <= set_alarm_min;
+			else nextstate <= set_alarm_hrs;
+			end if;
+			if B3 = '1'  and b3p = '0' then incha <= '1';
+			end if;
+			if aam_pm = '0' then
+				disp1_input <= "1101111111111111" & ahours & aminutes ;
+			else		disp1_input <= "1110111111111111" & ahours & aminutes ;
+			end if;
+			
+		when set_alarm_min =>
+			if B2 = '1' and b2p = '0' then nextstate <= alarm;
+			else nextstate <= set_alarm_min;
+			end if;
+			if B3 = '1' and b3p = '0' then incma <= '1';
+			end if;
+			if aam_pm = '0' then
+				disp1_input <= "1101111111111111" & ahours & aminutes ;
+			else		disp1_input <= "1110111111111111" & ahours & aminutes ;
+			end if;
+		
+		
+		when stop_watch =>
+			if B1 = '1' and b1p = '0' then nextstate <= time1;
+			else nextstate <= stop_watch;
+			end if;
+			if B2 = '1' and b2p = '0' then start_stop <= '1';
+			end if;
+			if B3 = '1' and b3p = '0' then reset <= '1';
+			end if;
+			disp1_input <= "11111111" & swminutes & swseconds & swhundreths;
+			
+		end case;
+		end process;
+		process(clk)
+	begin
+	if (rising_edge(clk)) then -- state clk
+	state <= nextstate;
+	ring_alarm <= ring;
+	alarm_set_disp <= alarm_set;
+	b1p <= B1;
+			b2p <= B2;
+			b3p <= B3;
+	end if;
+	end process;
+	process (main_clk)
+	begin 
+		if(rising_edge(main_clk)) then
+			if( counter >= 999999) then
+				clk <= '1';
+				counter <= 0;
+			else
+				counter <= counter + 1;
+				clk <= '0';
+		   end if;
+			end if;
+	end process;
+--	process (main_clk)                    --temp code
+--		begin
+--			if(rising_edge(main_clk)) then
+--				if(temp_counter >= 49999999) then 
+--					state_clk <= '1';
+--					temp_counter <= 0;
+--				else
+--					temp_counter <= temp_counter+1;
+--					state_clk <= '0';
+--				end if;
+--				end if;
+	--end process;			
+				
+
+end wristwatch1;
+
+
+library IEEE;
+use IEEE.numeric_bit.all;
+entity clock is
+port(clk, inch, incm, incha, incma, set_alarm, alarm_off: in bit;
+hours, ahours, minutes, aminutes, seconds: inout unsigned(7 downto 0);
+am_pm, aam_pm, ring, alarm_set: inout bit);
+end clock;
+architecture clock1 of clock is
+component CTR_59 is
+port(clk, inc, reset: in bit; dout: out unsigned(7 downto 0);
+t59: out bit);
+end component;
+component CTR_12 is
+port(clk, inc: in bit; dout: out unsigned(7 downto 0); am_pm: inout bit);
+end component;
+signal s59, m59, inchr, incmin, c99: bit;
+signal alarm_ring_time: integer range 0 to 50;
+signal div100: integer range 0 to 99;
+begin
+sec1: ctr_59 port map(clk, c99, '0', seconds, s59);
+min1: ctr_59 port map(clk, incmin, '0', minutes, m59);
+hrs1: ctr_12 port map(clk, inchr, hours, am_pm);
+incmin <= (s59 and c99) or incm;
+inchr <= (m59 and s59 and c99) or inch;
+alarm_min: ctr_59 port map(clk, incma, '0', aminutes, open);
+alarm_hr: ctr_12 port map(clk, incha, ahours, aam_pm);
+c99 <= '1' when div100 = 99 else '0';
+process(clk)
+begin
+if (rising_edge(clk)) then
+if c99 = '1' then div100 <= 0; -- divide by 100 counter
+else div100 <= div100 + 1;
+end if;
+if set_alarm = '1' then
+alarm_set <= not alarm_set;
+end if;
+if ((minutes = aminutes) and (hours = ahours) and (am_pm = aam_pm)) and
+seconds = 0 and alarm_set = '1' then
+ring <= '1';
+end if;
+if ring = '1' and c99 ='1' then
+alarm_ring_time <= alarm_ring_time + 1;
+end if;
+if alarm_ring_time = 50 or alarm_off = '1' then
+ring <= '0'; alarm_ring_time <= 0;
+end if;
+end if;
+end process;
+end clock1;
+
+
+library IEEE;
+use IEEE.numeric_bit.all;
+entity stopwatch is
+port(clk, reset, start_stop: in bit;
+swhundreths, swseconds, swminutes: inout unsigned(7 downto 0));
+end stopwatch;
+architecture stopwatch1 of stopwatch is
+component CTR_59 is
+port(clk, inc, reset: in bit; dout: out unsigned(7 downto 0); t59: out bit);
+end component;
+component CTR_99 is
+port(clk, inc, reset: in bit; dout: out unsigned(7 downto 0); t59: out bit);
+end component;
+signal swc99, s59, counting, swincmin: bit;
+begin
+ctr2: ctr_99 port map(clk, counting, reset, swhundreths, swc99);
+--counts hundreths of seconds
+sec2: ctr_59 port map(clk, swc99, reset, swseconds, s59);
+--counts seconds
+min2: ctr_59 port map(clk, swincmin, reset, swminutes, open);
+--counts minutes
+swincmin <= s59 and swc99;
+process(clk)
+begin
+if (rising_edge(clk))then
+if start_stop = '1' then
+counting <= not counting;
+end if;
+end if;
+end process;
+end stopwatch1;
+
+
+
+
+library IEEE;
+use IEEE.numeric_bit.all;
+--divide by 100 BCD counter
+entity CTR_99 is
+port(clk, inc, reset: in bit; dout: out unsigned(7 downto 0); t59: out bit);
+end CTR_99;
+architecture count99 of CTR_99 is
+signal dig1, dig0: unsigned(3 downto 0);
+begin
+process(clk)
+begin
+if (rising_edge(clk)) then
+if reset = '1' then dig0 <= "0000"; dig1 <= "0000";
+else
+if inc = '1' then
+if dig0 = 9 then dig0 <= "0000";
+if dig1 = 9 then dig1 <= "0000";
+else dig1 <= dig1 + 1;
+end if;
+else dig0 <= dig0 + 1;
+end if;
+end if;
+end if;
+end if;
+end process;
+t59 <= '1' when (dig1 = 9 and dig0 = 9) else '0';
+dout <= dig1 & dig0;
+end count99;
+
+
+
+
+
+library IEEE;
+use IEEE.numeric_bit.all;
+--this counter counts seconds or minutes 0 to 59
+entity CTR_59 is
+port(clk, inc, reset: in bit; dout: out unsigned(7 downto 0); t59: out bit);
+end CTR_59;
+architecture count59 of CTR_59 is
+signal dig1, dig0: unsigned(3 downto 0);
+begin
+process(clk)
+begin
+if (rising_edge(clk)) then
+if reset = '1' then dig0 <= "0000"; dig1 <= "0000";
+else
+if inc = '1' then
+if dig0 = 9 then dig0 <= "0000";
+if dig1 = 5 then dig1 <= "0000";
+else dig1 <= dig1 + 1;
+end if;
+else dig0 <= dig0 + 1;
+end if;
+end if;
+end if;
+end if;
+end process;
+t59 <= '1' when (dig1 = 5 and dig0 = 9) else '0';
+dout <= dig1 & dig0;
+end count59;
+
+
+
+library IEEE;
+use IEEE.numeric_bit.all;
+--this counter counts hours 1 to 12 and toggles am_pm
+entity CTR_12 is
+port(clk, inc: in bit; dout: out unsigned(7 downto 0); am_pm: inout bit);
+end CTR_12;
+architecture count12 of CTR_12 is
+signal dig0: unsigned(3 downto 0);
+signal dig1: bit;
+begin
+process(clk)
+begin
+if (rising_edge(clk)) then
+if inc = '1' then
+if dig1 = '1' and dig0 = 2 then
+dig1 <= '0'; dig0 <= "0001";
+else
+if dig0 = 9 then dig0 <= "0000"; dig1 <= '1';
+else dig0 <= dig0 + 1;
+end if;
+if dig1 = '1' and dig0 = 1 then am_pm <= not am_pm;
+end if;
+end if;
+end if;
+end if;
+end process;
+dout <= "000" & dig1 & dig0;
+end count12;
+
+
+
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.std_logic_unsigned.all;
+use IEEE.numeric_bit.all;
+
+entity seven is
+    Port ( main_clk : in bit;-- 100Mhz clock on Basys 3 FPGA board
+           reset : in bit; -- reset
+ displayed_number: in unsigned (31 downto 0);
+           Anode_Activate : out STD_LOGIC_VECTOR (7 downto 0);-- 4 Anode signals
+           LED_out : out STD_LOGIC_VECTOR (6 downto 0));-- Cathode patterns of 7-segment display
+end seven;
+
+architecture Behavioral of seven is
+signal one_second_counter: STD_LOGIC_VECTOR (27 downto 0);
+-- counter for generating 1-second clock enable
+signal one_second_enable: std_logic;
+-- one second enable for counting numbers
+-- counting decimal number to be displayed on 4-digit 7-segment display
+signal LED_BCD: unsigned (3 downto 0);
+signal refresh_counter: STD_LOGIC_VECTOR (19 downto 0);
+-- creating 10.5ms refresh period
+signal LED_activating_counter: std_logic_vector(2 downto 0);
+-- the other 2-bit for creating 4 LED-activating signals
+-- count         0    ->  1  ->  2  ->  3
+-- activates    LED1    LED2   LED3   LED4
+-- and repeat
+begin
+-- VHDL code for BCD to 7-segment decoder
+-- Cathode patterns of the 7-segment LED display
+process(LED_BCD)
+begin
+    case LED_BCD is
+    when "0000" => LED_out <= "0000001"; -- "0"    
+    when "0001" => LED_out <= "1001111"; -- "1"
+    when "0010" => LED_out <= "0010010"; -- "2"
+    when "0011" => LED_out <= "0000110"; -- "3"
+    when "0100" => LED_out <= "1001100"; -- "4"
+    when "0101" => LED_out <= "0100100"; -- "5"
+    when "0110" => LED_out <= "0100000"; -- "6"
+    when "0111" => LED_out <= "0001111"; -- "7"
+    when "1000" => LED_out <= "0000000"; -- "8"    
+    when "1001" => LED_out <= "0000100"; -- "9"
+    when "1010" => LED_out <= "0000010"; -- a
+    when "1011" => LED_out <= "1100000"; -- b
+    when "1100" => LED_out <= "0110001"; -- C
+    when "1101" => LED_out <= "0001000"; -- d
+    when "1110" => LED_out <= "0011000"; -- E
+    when "1111" => LED_out <= "1111111"; -- F
+    end case;
+end process;
+-- 7-segment display controller
+-- generate refresh period of 10.5ms
+process(main_clk,reset)
+begin
+    if(reset='1') then
+        refresh_counter <= (others => '0');
+    elsif(rising_edge(main_clk)) then
+        refresh_counter <= refresh_counter + 1;
+    end if;
+end process;
+ LED_activating_counter <= refresh_counter(19 downto 17);
+-- 4-to-1 MUX to generate anode activating signals for 4 LEDs
+process(LED_activating_counter)
+begin
+    case LED_activating_counter is
+    when "000" =>
+        Anode_Activate <= "01111111";
+        -- activate LED1 and Deactivate LED2, LED3, LED4
+        LED_BCD <= displayed_number(31 downto 28);
+        -- the first hex digit of the 16-bit number
+    when "001" =>
+        Anode_Activate <= "10111111";
+        -- activate LED2 and Deactivate LED1, LED3, LED4
+        LED_BCD <= displayed_number(27 downto 24);
+        -- the second hex digit of the 16-bit number
+    when "010" =>
+        Anode_Activate <= "11011111";
+        -- activate LED3 and Deactivate LED2, LED1, LED4
+        LED_BCD <= displayed_number(23 downto 20);
+        -- the third hex digit of the 16-bit number
+    when "011" =>
+        Anode_Activate <= "11101111";
+        LED_BCD <= displayed_number(19 downto 16);
+when "100" =>
+        Anode_Activate <= "11110111";
+        LED_BCD <= displayed_number(15 downto 12);
+    when "101" =>
+        Anode_Activate <= "11111011";
+        LED_BCD <= displayed_number(11 downto 8);
+    when "110" =>
+        Anode_Activate <= "11111101";
+        LED_BCD <= displayed_number(7 downto 4);
+when "111" =>
+        Anode_Activate <= "11111110";
+        LED_BCD <= displayed_number(3 downto 0);
+when others =>
+LED_BCD <= "1111";
+    end case;
+end process;
+-- Counting the number to be displayed on 4-digit 7-segment Display
+-- on Basys 3 FPGA board
+process(main_clk, reset)
+begin
+        if(reset='1') then
+            one_second_counter <= (others => '0');
+        elsif(rising_edge(main_clk)) then
+            if(one_second_counter>=x"5F5E0FF") then
+                one_second_counter <= (others => '0');
+            else
+                one_second_counter <= one_second_counter + "0000001";
+            end if;
+        end if;
+end process;
+one_second_enable <= '1' when one_second_counter=x"5F5E0FF" else '0';
+
+end Behavioral;
+
+
+NET  "B1" LOC ="M18" | IOSTANDARD="LVCMOS33";
+NET  "B2" LOC ="N17" | IOSTANDARD="LVCMOS33";
+NET  "B3" LOC ="P18" | IOSTANDARD="LVCMOS33";
+NET  "main_clk" LOC ="E3" | IOSTANDARD="LVCMOS33";
+NET  "anode(7)" LOC ="U13" | IOSTANDARD="LVCMOS33";
+NET  "anode(6)" LOC ="K2" | IOSTANDARD="LVCMOS33";
+NET  "anode(5)" LOC ="T14" | IOSTANDARD="LVCMOS33";
+NET  "anode(4)" LOC ="P14" | IOSTANDARD="LVCMOS33";
+NET  "anode(3)" LOC ="J14" | IOSTANDARD="LVCMOS33";
+NET  "anode(2)" LOC ="T9" | IOSTANDARD="LVCMOS33";
+NET  "anode(1)" LOC ="J18" | IOSTANDARD="LVCMOS33";
+NET  "anode(0)" LOC ="J17" | IOSTANDARD="LVCMOS33";
+NET  "ledout1(6)" LOC ="T10" | IOSTANDARD="LVCMOS33";
+NET  "ledout1(5)" LOC ="R10" | IOSTANDARD="LVCMOS33";
+NET  "ledout1(4)" LOC ="K16" | IOSTANDARD="LVCMOS33";
+NET  "ledout1(3)" LOC ="K13" | IOSTANDARD="LVCMOS33";
+NET  "ledout1(2)" LOC ="P15" | IOSTANDARD="LVCMOS33";
+NET  "ledout1(1)" LOC ="T11" | IOSTANDARD="LVCMOS33";
+NET  "ledout1(0)" LOC ="L18" | IOSTANDARD="LVCMOS33";
+NET  "ring_alarm" LOC ="J13" | IOSTANDARD="LVCMOS33";
+NET  "alarm_set_disp" LOC ="K15" | IOSTANDARD="LVCMOS33";
+
+
+
